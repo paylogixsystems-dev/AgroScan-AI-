@@ -1,0 +1,5 @@
+{
+  "name": "AgroScan Drone AI",
+  "description": "A remote agriculture land monitoring platform using AI-powered drone image analysis to identify plant types and monitor crop health.",
+  "requestFramePermissions": []
+}
