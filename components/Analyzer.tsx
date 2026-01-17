@@ -1,14 +1,16 @@
 
 import React, { useState, useRef } from 'react';
-import { Upload, Loader2, CheckCircle, AlertCircle, RefreshCw, ChevronRight, Info, Zap, Languages } from 'lucide-react';
+import { Upload, Loader2, CheckCircle, AlertCircle, RefreshCw, ChevronRight, Info, Zap, Languages, Database } from 'lucide-react';
 import { analyzeDroneImage } from '../services/geminiService';
 import { PlantAnalysis } from '../types';
+import { supabase } from '../services/supabaseClient';
 
 interface Props {
   onAnalysisComplete: (analysis: PlantAnalysis) => void;
+  userName: string;
 }
 
-const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
+const Analyzer: React.FC<Props> = ({ onAnalysisComplete, userName }) => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,10 +41,30 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
       const base64Data = preview.split(',')[1];
       const aiResponse = await analyzeDroneImage(base64Data);
       
+      // Save to Supabase
+      const { data: dbData, error: dbError } = await supabase
+        .from('inspections')
+        .insert([{
+          user_name: userName,
+          plant_type: aiResponse.plantType,
+          plant_type_tamil: aiResponse.plantTypeTamil,
+          health_status: aiResponse.healthStatus,
+          confidence_score: aiResponse.confidenceScore,
+          image_url: preview, // In production, upload to bucket first
+          description: aiResponse.description,
+          description_tamil: aiResponse.descriptionTamil,
+          recommendations: aiResponse.recommendations,
+          recommendations_tamil: aiResponse.recommendationsTamil
+        }])
+        .select();
+
+      if (dbError) throw dbError;
+
+      const savedItem = dbData[0];
       const newAnalysis: PlantAnalysis = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: new Date().toISOString(),
-        imageUrl: preview,
+        id: savedItem.id,
+        timestamp: savedItem.created_at,
+        imageUrl: savedItem.image_url,
         ...aiResponse
       };
       
@@ -50,7 +72,7 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
       onAnalysisComplete(newAnalysis);
     } catch (err) {
       console.error(err);
-      setError("Failed to process image. Ensure your API key is valid and the image is clear.");
+      setError("Analysis failed. Check your Supabase URL/Key or Gemini API status.");
     } finally {
       setLoading(false);
     }
@@ -59,9 +81,9 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <header className="text-center space-y-3">
-        <h1 className="text-4xl font-bold text-slate-900 tracking-tight">AI Inspection Tool</h1>
+        <h1 className="text-4xl font-bold text-slate-900 tracking-tight">AI Drone Inspection</h1>
         <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-          Drone photos to insights via <span className="text-emerald-600 font-semibold mx-1">Gemini AI</span>.
+          Remote sensing with cloud persistence via <span className="text-blue-600 font-semibold mx-1">Supabase</span>.
         </p>
       </header>
 
@@ -96,26 +118,34 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
                     !file || loading ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'
                   }`}
                 >
-                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /><span>Processing...</span></> : <><RefreshCw className="w-6 h-6" /><span>Process with AI / ஆய்வு செய்க</span></>}
+                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /><span>Syncing to Cloud...</span></> : <><RefreshCw className="w-6 h-6" /><span>Analyze & Save / ஆய்வு செய்க</span></>}
                 </button>
+                
+                {error && (
+                  <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex items-start space-x-2 text-red-600 text-xs">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                )}
               </div>
 
               <div className="md:w-1/2 space-y-4">
-                <div className="bg-emerald-50 rounded-2xl p-6 border border-emerald-100">
+                <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Zap className="w-5 h-5 text-emerald-600" />
-                    <h3 className="font-bold text-emerald-900">Tamil Support Enabled</h3>
+                    <Database className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-bold text-blue-900">Cloud Storage Live</h3>
                   </div>
-                  <p className="text-sm text-emerald-800/80 leading-relaxed">
-                    ஆய்வு முடிவுகள் தமிழ் மற்றும் ஆங்கிலத்தில் வழங்கப்படும்.
-                    (Results available in Tamil & English).
+                  <p className="text-sm text-blue-800/80 leading-relaxed">
+                    Inspections are now saved to your global account for access from any device.
                   </p>
                 </div>
                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 text-sm text-slate-600 space-y-2">
-                  <p className="font-bold text-slate-900">How to test:</p>
-                  <p>1. Upload a drone shot / படம் பதிவேற்றவும்.</p>
-                  <p>2. Click Process / ஆய்வு செய்க.</p>
-                  <p>3. Read analysis / முடிவுகளைப் படிக்கவும்.</p>
+                  <p className="font-bold text-slate-900">Workflow:</p>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Upload aerial photo</li>
+                    <li>Gemini AI analyzes pixels</li>
+                    <li>Results written to Supabase DB</li>
+                  </ol>
                 </div>
               </div>
             </div>
@@ -131,7 +161,6 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
               <div className="space-y-1">
                 <p className="font-bold text-slate-400">Analysis Pending</p>
                 <p className="text-xs text-slate-400">ஆய்வு நிலுவையில் உள்ளது</p>
-                <p className="text-[10px] text-slate-300 px-6">Upload a photo to see results in Tamil & English</p>
               </div>
             </div>
           )}
@@ -140,8 +169,8 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
             <div className="flex-grow flex flex-col items-center justify-center space-y-6 text-center">
               <div className="w-16 h-16 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin"></div>
               <div className="space-y-2">
-                <h3 className="font-bold text-slate-800">Reading Data...</h3>
-                <p className="text-xs text-slate-500 font-medium">தரவு ஆய்வு செய்யப்படுகிறது...</p>
+                <h3 className="font-bold text-slate-800">Processing Pixels...</h3>
+                <p className="text-xs text-slate-500 font-medium">Syncing results to cloud...</p>
               </div>
             </div>
           )}
@@ -150,7 +179,7 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 overflow-y-auto max-h-[600px] pr-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-[10px] font-bold text-emerald-600 tracking-widest mb-1">SUCCESS</p>
+                  <p className="text-[10px] font-bold text-emerald-600 tracking-widest mb-1">CLOUD SYNCED</p>
                   <h2 className="text-xl font-bold text-slate-900">{result.plantType}</h2>
                   <h2 className="text-lg font-bold text-emerald-600">{result.plantTypeTamil}</h2>
                 </div>
@@ -168,18 +197,18 @@ const Analyzer: React.FC<Props> = ({ onAnalysisComplete }) => {
               </div>
 
               <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Analysis / பகுப்பாய்வு</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Findings / பகுப்பாய்வு</h4>
                 <p className="text-slate-600 text-sm leading-relaxed mb-2">{result.description}</p>
                 <p className="text-emerald-700 text-sm font-medium leading-relaxed italic">{result.descriptionTamil}</p>
               </div>
 
               <div className="space-y-3 bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Recommendations / பரிந்துரைகள்</h4>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Recommendations</h4>
                 <div className="space-y-4">
                   {result.recommendations.map((rec, i) => (
                     <div key={i} className="space-y-1">
-                      <p className="text-xs text-slate-700">• {rec}</p>
-                      <p className="text-xs text-emerald-700 font-medium pl-3 italic">{result.recommendationsTamil[i]}</p>
+                      <p className="text-xs text-slate-700 font-medium leading-snug">• {rec}</p>
+                      <p className="text-[11px] text-emerald-700 font-medium pl-3 italic">{result.recommendationsTamil?.[i] || ''}</p>
                     </div>
                   ))}
                 </div>

@@ -1,115 +1,120 @@
+
 ============================================================
-AGROSCAN AI - SYSTEM DEPLOYMENT & DATABASE GUIDE
+AGROSCAN AI - FULL DEPLOYMENT & DATABASE BLUEPRINT
 ============================================================
 
-1. DATABASE SCHEMA (DDL - Data Definition Language)
+This guide provides everything needed to take AgroScan from 
+a local demo to a live, cloud-powered production app.
+
+1. DATABASE SCHEMA (DDL - Run in Supabase SQL Editor)
 ------------------------------------------------------------
-Run this script in your SQL editor (Supabase / PostgreSQL) 
-to create the necessary table structure.
-
--- Enable UUID extension if not enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Create the central inspections table
+-- Create the table for storing drone inspection results
 CREATE TABLE inspections (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     user_name TEXT NOT NULL,
     
-    -- Plant Identification
+    -- Plant Data
     plant_type TEXT NOT NULL,
     plant_type_tamil TEXT NOT NULL,
     
-    -- AI Analysis Results
-    health_status TEXT NOT NULL, -- 'Healthy', 'Stressed', 'Diseased'
+    -- Analysis Results
+    health_status TEXT NOT NULL,
     confidence_score INTEGER NOT NULL,
-    image_url TEXT NOT NULL, -- Store the bucket URL of the drone image
+    image_url TEXT NOT NULL,
     
-    -- Multi-language details
+    -- Detailed Descriptions
     description TEXT,
     description_tamil TEXT,
+    
+    -- Lists (Postgres Arrays)
     recommendations TEXT[] DEFAULT '{}',
     recommendations_tamil TEXT[] DEFAULT '{}'
 );
 
--- Add index for performance
-CREATE INDEX idx_inspections_user_timestamp ON inspections(user_name, created_at DESC);
+-- Enable Row Level Security (RLS)
+ALTER TABLE inspections ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read/write (For Demo purposes)
+-- NOTE: In production, limit this to authenticated users
+CREATE POLICY "Public Read/Write Access" 
+ON inspections FOR ALL 
+USING (true) 
+WITH CHECK (true);
+
+-- Create index for faster search by user
+CREATE INDEX idx_inspections_user ON inspections(user_name);
 
 
-2. DATA OPERATIONS (DML - Data Manipulation Language)
+2. DATABASE QUERIES (DML - Examples)
 ------------------------------------------------------------
-
--- A. Insert a new inspection result
+-- INSERT: Save a new record manually
 INSERT INTO inspections (
     user_name, plant_type, plant_type_tamil, 
-    health_status, confidence_score, image_url, 
-    description, description_tamil, 
+    health_status, confidence_score, image_url,
+    description, description_tamil,
     recommendations, recommendations_tamil
 ) VALUES (
-    'Farmer John', 'Areca Nut', 'பாக்கு மரம்', 
-    'Healthy', 95, 'https://storage.link/farm_img_001.jpg',
-    'Vibrant leaves detected.', 'துடிப்பான இலைகள் கண்டறியப்பட்டன.',
-    ARRAY['Regular irrigation'], ARRAY['வழக்கமான நீர்ப்பாசனம்']
+    'Farmer Joe', 'Areca Nut', 'பாக்கு மரம்',
+    'Healthy', 98, 'https://example.com/shot.jpg',
+    'Healthy growth pattern.', 'ஆரோக்கியமான வளர்ச்சி.',
+    ARRAY['Water daily'], ARRAY['தினமும் தண்ணீர்']
 );
 
--- B. Fetch history for a specific farmer
-SELECT * FROM inspections 
-WHERE user_name = 'Farmer John' 
-ORDER BY created_at DESC;
+-- SELECT: Get latest 10 inspections
+SELECT * FROM inspections ORDER BY created_at DESC LIMIT 10;
 
--- C. Delete a specific record
-DELETE FROM inspections WHERE id = '[TARGET_UUID_HERE]';
-
--- D. Get health statistics for dashboard
-SELECT health_status, COUNT(*) 
-FROM inspections 
-GROUP BY health_status;
+-- DELETE: Remove a record
+DELETE FROM inspections WHERE id = '[TARGET_ID]';
 
 
-3. GEMINI API INTEGRATION
+3. GEMINI API SETUP (AI Analysis)
 ------------------------------------------------------------
-The application is pre-configured to use the Google Gemini API 
-via the @google/genai SDK.
+The app uses Google Gemini to process drone images.
 
-- How to get a Key:
-  1. Visit: https://aistudio.google.com/app/apikey
-  2. Create a new API Key.
-  3. Copy the key.
-
-- Local Development:
-  Vite/ESM environment variables are handled automatically. 
-  Ensure you do not hardcode this key in the files.
-
-- Production:
-  When deploying, you MUST add this key as an environment variable 
-  named exactly: API_KEY
+1. Go to https://aistudio.google.com/
+2. Log in with your Google Account.
+3. Click "Get API Key" on the sidebar.
+4. Click "Create API Key in new project".
+5. Copy the generated key.
+6. You will use this as the `API_KEY` environment variable.
 
 
-4. DEPLOYMENT STEPS (Step-by-Step)
+4. DEPLOYMENT STEPS (Vercel)
 ------------------------------------------------------------
-Recommended Host: Vercel (https://vercel.com)
+1. PUSH TO GITHUB:
+   Commit your code and push it to a new GitHub repository.
 
-1. CODE PREP:
-   Push your project folder to a GitHub repository.
+2. CONNECT VERCEL:
+   - Go to https://vercel.com/
+   - Click "Add New" -> "Project".
+   - Import your GitHub repo.
 
-2. VERCEL CONNECT:
-   - Log in to Vercel and click "Add New" -> "Project".
-   - Import your GitHub repository.
+3. CONFIGURE ENV VARS (CRITICAL):
+   In the Vercel project settings, add these 3 variables:
+   
+   A. Name: API_KEY
+      Value: [Your Gemini Key from step 3]
 
-3. CONFIGURE ENVIRONMENT:
-   - Expand the "Environment Variables" section.
-   - Key: API_KEY
-   - Value: [Paste your Gemini API Key here]
-   - Click "Add".
+   B. Name: SUPABASE_URL
+      Value: [Found in Supabase Project Settings > API]
 
-4. BUILD & DEPLOY:
-   - Click "Deploy".
-   - Vercel will build the React app and give you a public URL.
+   C. Name: SUPABASE_ANON_KEY
+      Value: [Found in Supabase Project Settings > API]
 
-5. DATABASE CONNECTION (OPTIONAL):
-   - If migrating from LocalStorage to Supabase, add 
-     SUPABASE_URL and SUPABASE_ANON_KEY to Vercel Env Vars.
+4. BUILD & LAUNCH:
+   Vercel will build the app and give you a public URL like:
+   https://agroscan-ai.vercel.app
+
+
+5. IMAGE STORAGE OPTIMIZATION
+------------------------------------------------------------
+Currently, images are stored as Base64. For production:
+1. Enable "Storage" in Supabase.
+2. Create a bucket named "drone-images".
+3. Use supabase.storage.from('drone-images').upload() 
+   in Analyzer.tsx before saving the DB record.
 
 ============================================================
-PREPARED BY AGROSCAN SYSTEMS ARCHITECT
+PREPARED BY AGROSCAN PRODUCT ARCHITECT
 ============================================================

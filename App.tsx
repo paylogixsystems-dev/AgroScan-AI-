@@ -9,7 +9,11 @@ import {
   X,
   Sprout,
   LogOut,
-  BookOpen
+  BookOpen,
+  Loader2,
+  AlertTriangle,
+  ExternalLink,
+  Database
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Analyzer from './components/Analyzer';
@@ -17,6 +21,7 @@ import HistoryView from './components/HistoryView';
 import Login from './components/Login';
 import RealtimeGuide from './components/RealtimeGuide';
 import { NavigationTab, PlantAnalysis } from './types';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: string }) => {
   const location = useLocation();
@@ -26,7 +31,7 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
     { id: NavigationTab.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { id: NavigationTab.ANALYZER, label: 'Run AI Scan', icon: Camera, path: '/analyzer' },
     { id: NavigationTab.HISTORY, label: 'History', icon: History, path: '/history' },
-    { id: NavigationTab.GUIDE, label: 'How it Works', icon: BookOpen, path: '/guide' },
+    { id: NavigationTab.GUIDE, label: 'Setup Guide', icon: BookOpen, path: '/guide' },
   ];
 
   const userInitial = userName.charAt(0).toUpperCase();
@@ -40,7 +45,6 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
             <span className="text-xl font-bold tracking-tight">AgroScan AI</span>
           </div>
 
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center space-x-6">
             <div className="flex space-x-1">
               {tabs.map((tab) => {
@@ -78,7 +82,6 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
             </div>
           </div>
 
-          {/* Mobile button */}
           <div className="md:hidden flex items-center space-x-2">
             <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-md hover:bg-emerald-700">
               {isOpen ? <X /> : <Menu />}
@@ -87,7 +90,6 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
         </div>
       </div>
 
-      {/* Mobile Menu */}
       {isOpen && (
         <div className="md:hidden bg-emerald-900 border-t border-emerald-700">
           <div className="px-2 pt-2 pb-3 space-y-1">
@@ -128,34 +130,89 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<PlantAnalysis[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [userName, setUserName] = useState<string>(() => localStorage.getItem('agroscan_user') || 'Farmer');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('agroscan_auth') === 'true';
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('agroscan_history');
-    if (saved) {
-      setHistory(JSON.parse(saved));
+  const fetchHistory = async () => {
+    if (!supabase) {
+      setLoading(false);
+      return;
     }
-  }, []);
+    
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      const mappedData: PlantAnalysis[] = (data || []).map(item => ({
+        id: item.id,
+        timestamp: item.created_at,
+        imageUrl: item.image_url,
+        plantType: item.plant_type,
+        plantTypeTamil: item.plant_type_tamil,
+        healthStatus: item.health_status,
+        description: item.description,
+        descriptionTamil: item.description_tamil,
+        confidenceScore: item.confidence_score,
+        recommendations: item.recommendations,
+        recommendations_tamil: item.recommendations_tamil
+      } as any));
+      
+      setHistory(mappedData);
+    } catch (err) {
+      console.error('Error fetching from Supabase:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchHistory();
+    }
+  }, [isAuthenticated]);
 
   const addToHistory = (analysis: PlantAnalysis) => {
-    const updated = [analysis, ...history];
-    setHistory(updated);
-    localStorage.setItem('agroscan_history', JSON.stringify(updated));
+    setHistory(prev => [analysis, ...prev]);
   };
 
-  const deleteFromHistory = (id: string) => {
-    const updated = history.filter(item => item.id !== id);
-    setHistory(updated);
-    localStorage.setItem('agroscan_history', JSON.stringify(updated));
+  const deleteFromHistory = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setHistory(prev => prev.filter(item => item.id !== id));
+    } catch (err) {
+      console.error('Error deleting from Supabase:', err);
+      alert('Failed to delete from cloud database.');
+    }
   };
 
-  const clearHistory = () => {
-    if (window.confirm('Are you sure you want to clear all inspection history?')) {
-      setHistory([]);
-      localStorage.removeItem('agroscan_history');
+  const clearHistory = async () => {
+    if (!supabase) return;
+    if (window.confirm('Clear all cloud history? This cannot be undone.')) {
+      try {
+        const { error } = await supabase
+          .from('inspections')
+          .delete()
+          .not('id', 'is', null);
+
+        if (error) throw error;
+        setHistory([]);
+      } catch (err) {
+        console.error('Error clearing Supabase history:', err);
+      }
     }
   };
 
@@ -176,18 +233,70 @@ const App: React.FC = () => {
     return <Login onLogin={handleLogin} />;
   }
 
+  // Show configuration screen if Supabase is missing keys
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 text-center space-y-6 shadow-2xl">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-10 h-10 text-amber-600" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-slate-900">Database Setup Required</h2>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              To use AgroScan, you must configure your <strong>Supabase</strong> environment variables.
+            </p>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-2xl text-left font-mono text-xs space-y-2 border border-slate-100">
+             <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Required Keys:</p>
+             <ul className="space-y-1 text-slate-700">
+               <li>• SUPABASE_URL</li>
+               <li>• SUPABASE_ANON_KEY</li>
+             </ul>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a 
+              href="https://supabase.com" 
+              target="_blank"
+              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-colors"
+            >
+              <span>Go to Supabase</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+            >
+              I've added the keys, reload
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400">
+            Check <strong>DEPLOYMENT_GUIDE.txt</strong> for instructions.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <HashRouter>
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navigation onLogout={handleLogout} userName={userName} />
         <main className="flex-grow max-w-7xl mx-auto w-full px-4 py-8">
-          <Routes>
-            <Route path="/" element={<Dashboard history={history} onDelete={deleteFromHistory} onClearAll={clearHistory} />} />
-            <Route path="/analyzer" element={<Analyzer onAnalysisComplete={addToHistory} />} />
-            <Route path="/history" element={<HistoryView history={history} onDelete={deleteFromHistory} />} />
-            <Route path="/guide" element={<RealtimeGuide />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {loading ? (
+             <div className="h-64 flex flex-col items-center justify-center space-y-4">
+               <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+               <p className="text-slate-500 font-medium">Syncing with cloud database...</p>
+             </div>
+          ) : (
+            <Routes>
+              <Route path="/" element={<Dashboard history={history} onDelete={deleteFromHistory} onClearAll={clearHistory} />} />
+              <Route path="/analyzer" element={<Analyzer onAnalysisComplete={addToHistory} userName={userName} />} />
+              <Route path="/history" element={<HistoryView history={history} onDelete={deleteFromHistory} />} />
+              <Route path="/guide" element={<RealtimeGuide />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          )}
         </main>
         <footer className="bg-slate-900 text-slate-400 py-8 border-t border-slate-800">
           <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
@@ -195,7 +304,7 @@ const App: React.FC = () => {
               <Sprout className="w-5 h-5 text-emerald-500" />
               <span className="text-white font-semibold">AgroScan Systems</span>
             </div>
-            <p className="text-sm">© 2024 Precision AgTech Solutions. All rights reserved.</p>
+            <p className="text-sm">© 2024 Precision AgTech Solutions. Cloud Powered.</p>
             <div className="flex space-x-6 text-sm">
               <a href="#" className="hover:text-emerald-400">Terms</a>
               <a href="#" className="hover:text-emerald-400">Privacy</a>
