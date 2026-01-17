@@ -15,13 +15,13 @@ import {
   ExternalLink,
   Database
 } from 'lucide-react';
-import Dashboard from './components/Dashboard';
-import Analyzer from './components/Analyzer';
-import HistoryView from './components/HistoryView';
-import Login from './components/Login';
-import RealtimeGuide from './components/RealtimeGuide';
-import { NavigationTab, PlantAnalysis } from './types';
-import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+import Dashboard from '../components/Dashboard';
+import Analyzer from '../components/Analyzer';
+import HistoryView from '../components/HistoryView';
+import Login from '../components/Login';
+import RealtimeGuide from '../components/RealtimeGuide';
+import { NavigationTab, PlantAnalysis } from '../types';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: string }) => {
   const location = useLocation();
@@ -304,7 +304,7 @@ const App: React.FC = () => {
               <Sprout className="w-5 h-5 text-emerald-500" />
               <span className="text-white font-semibold">AgroScan Systems</span>
             </div>
-            <p className="text-sm">© 2024 Precision AgTech Solutions. Cloud Powered.</p>
+            <p className="text-sm">© 2025 Precision AgTech Solutions. Cloud Powered.</p>
             <div className="flex space-x-6 text-sm">
               <a href="#" className="hover:text-emerald-400">Terms</a>
               <a href="#" className="hover:text-emerald-400">Privacy</a>
