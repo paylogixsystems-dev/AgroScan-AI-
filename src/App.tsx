@@ -13,15 +13,16 @@ import {
   Loader2,
   AlertTriangle,
   ExternalLink,
-  Database
+  Settings,
+  ShieldAlert
 } from 'lucide-react';
-import Dashboard from '../components/Dashboard';
-import Analyzer from '../components/Analyzer';
-import HistoryView from '../components/HistoryView';
-import Login from '../components/Login';
-import RealtimeGuide from '../components/RealtimeGuide';
-import { NavigationTab, PlantAnalysis } from '../types';
-import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import Dashboard from './components/Dashboard';
+import Analyzer from './components/Analyzer';
+import HistoryView from './components/HistoryView';
+import Login from './components/Login';
+import RealtimeGuide from './components/RealtimeGuide';
+import { NavigationTab, PlantAnalysis } from './types';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: string }) => {
   const location = useLocation();
@@ -69,7 +70,7 @@ const Navigation = ({ onLogout, userName }: { onLogout: () => void, userName: st
 
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 px-3 py-1 bg-emerald-700/30 rounded-full">
-                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm">{userInitial}</div>
+                <div className="w-6 h-6 bg-emerald-50 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm">{userInitial}</div>
                 <span className="text-xs font-medium text-emerald-100">{userName}</span>
               </div>
               <button 
@@ -161,9 +162,9 @@ const App: React.FC = () => {
         description: item.description,
         descriptionTamil: item.description_tamil,
         confidenceScore: item.confidence_score,
-        recommendations: item.recommendations,
-        recommendations_tamil: item.recommendations_tamil
-      } as any));
+        recommendations: item.recommendations || [],
+        recommendationsTamil: item.recommendations_tamil || []
+      }));
       
       setHistory(mappedData);
     } catch (err) {
@@ -233,45 +234,56 @@ const App: React.FC = () => {
     return <Login onLogin={handleLogin} />;
   }
 
-  // Show configuration screen if Supabase is missing keys
-  if (!isSupabaseConfigured) {
+  // Show configuration screen if Supabase or API Key is missing
+  const isApiConfigured = !!import.meta.env.VITE_GEMINI_API_KEY;
+  if (!isSupabaseConfigured || !isApiConfigured) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-[2.5rem] p-10 text-center space-y-6 shadow-2xl">
-          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-            <AlertTriangle className="w-10 h-10 text-amber-600" />
+        <div className="max-w-md w-full bg-white rounded-[2.5rem] p-8 md:p-10 text-center space-y-6 shadow-2xl">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-8 h-8 md:w-10 md:h-10 text-amber-600" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-slate-900">Database Setup Required</h2>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              To use AgroScan, you must configure your <strong>Supabase</strong> environment variables.
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900">Missing Configuration</h2>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              Environment variables are missing in Vercel. You must add them to enable AI analysis and Cloud Storage.
             </p>
           </div>
-          <div className="bg-slate-50 p-4 rounded-2xl text-left font-mono text-xs space-y-2 border border-slate-100">
-             <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Required Keys:</p>
-             <ul className="space-y-1 text-slate-700">
-               <li>• SUPABASE_URL</li>
-               <li>• SUPABASE_ANON_KEY</li>
-             </ul>
+          <div className="bg-slate-50 p-4 md:p-5 rounded-2xl text-left font-mono text-[10px] md:text-xs space-y-3 border border-slate-100">
+             <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Status Check:</p>
+             <div className="space-y-2">
+               <div className="flex justify-between items-center">
+                 <span>API_KEY</span>
+                 <span className={isApiConfigured ? 'text-emerald-600' : 'text-red-500'}>{isApiConfigured ? '✓ Set' : '✗ Missing'}</span>
+               </div>
+               <div className="flex justify-between items-center">
+                 <span>SUPABASE_URL</span>
+                 <span className={!!process.env.SUPABASE_URL ? 'text-emerald-600' : 'text-red-500'}>{!!process.env.SUPABASE_URL ? '✓ Set' : '✗ Missing'}</span>
+               </div>
+               <div className="flex justify-between items-center">
+                 <span>SUPABASE_ANON_KEY</span>
+                 <span className={!!process.env.SUPABASE_ANON_KEY ? 'text-emerald-600' : 'text-red-500'}>{!!process.env.SUPABASE_ANON_KEY ? '✓ Set' : '✗ Missing'}</span>
+               </div>
+             </div>
           </div>
           <div className="flex flex-col gap-3">
             <a 
-              href="https://supabase.com" 
+              href="https://vercel.com/dashboard" 
               target="_blank"
-              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-colors"
+              className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-slate-800 transition-colors text-sm"
             >
-              <span>Go to Supabase</span>
-              <ExternalLink className="w-4 h-4" />
+              <span>Vercel Settings</span>
+              <Settings className="w-4 h-4" />
             </a>
             <button 
               onClick={() => window.location.reload()}
-              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors text-sm"
             >
-              I've added the keys, reload
+              Retry Connection
             </button>
           </div>
           <p className="text-[10px] text-slate-400">
-            Check <strong>DEPLOYMENT_GUIDE.txt</strong> for instructions.
+            Open <strong>DEPLOYMENT_GUIDE.txt</strong> for a step-by-step setup walkthrough.
           </p>
         </div>
       </div>
@@ -282,11 +294,11 @@ const App: React.FC = () => {
     <HashRouter>
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Navigation onLogout={handleLogout} userName={userName} />
-        <main className="flex-grow max-w-7xl mx-auto w-full px-4 py-8">
+        <main className="flex-grow max-w-7xl mx-auto w-full px-2 md:px-4 py-6 md:py-8">
           {loading ? (
              <div className="h-64 flex flex-col items-center justify-center space-y-4">
                <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-               <p className="text-slate-500 font-medium">Syncing with cloud database...</p>
+               <p className="text-slate-500 font-medium text-sm md:text-base">Syncing cloud telemetry...</p>
              </div>
           ) : (
             <Routes>
@@ -298,17 +310,17 @@ const App: React.FC = () => {
             </Routes>
           )}
         </main>
-        <footer className="bg-slate-900 text-slate-400 py-8 border-t border-slate-800">
+        <footer className="bg-slate-900 text-slate-400 py-8 border-t border-slate-800 mt-auto">
           <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <div className="flex items-center space-x-2">
               <Sprout className="w-5 h-5 text-emerald-500" />
               <span className="text-white font-semibold">AgroScan Systems</span>
             </div>
-            <p className="text-sm">© 2025 Precision AgTech Solutions. Cloud Powered.</p>
-            <div className="flex space-x-6 text-sm">
-              <a href="#" className="hover:text-emerald-400">Terms</a>
+            <p className="text-[10px] md:text-sm text-center">© 2024 Precision AgTech Solutions. Cloud Powered.</p>
+            <div className="flex space-x-6 text-[10px] md:text-sm">
+              <a href="#" className="hover:text-emerald-400">Security</a>
               <a href="#" className="hover:text-emerald-400">Privacy</a>
-              <a href="#" className="hover:text-emerald-400">Contact</a>
+              <a href="#" className="hover:text-emerald-400">Support</a>
             </div>
           </div>
         </footer>

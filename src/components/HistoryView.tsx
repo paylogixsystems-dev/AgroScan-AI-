@@ -29,11 +29,11 @@ const HistoryView: React.FC<Props> = ({ history, onDelete }) => {
           <p className="text-slate-500">Track your farmland health over time.</p>
         </div>
         <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-          <span className="text-emerald-700 font-bold text-sm">{history.length} Inspections Total</span>
+          <span className="text-emerald-700 font-bold text-sm">{(history || []).length} Inspections Total</span>
         </div>
       </header>
 
-      {history.length === 0 ? (
+      {(!history || history.length === 0) ? (
         <div className="bg-white rounded-3xl border border-slate-100 p-20 text-center space-y-4 shadow-sm">
           <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
             <Calendar className="w-10 h-10 text-slate-300" />
@@ -88,9 +88,9 @@ const HistoryView: React.FC<Props> = ({ history, onDelete }) => {
               <div className="p-6 space-y-4">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-slate-900 text-lg leading-tight">{item.plantType}</h3>
+                    <h3 className="font-bold text-slate-900 text-lg leading-tight truncate">{item.plantType}</h3>
                   </div>
-                  <p className="text-sm font-bold text-emerald-600">{item.plantTypeTamil}</p>
+                  <p className="text-sm font-bold text-emerald-600 truncate">{item.plantTypeTamil}</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -140,12 +140,12 @@ const HistoryView: React.FC<Props> = ({ history, onDelete }) => {
             </div>
 
             <div className="p-6 sm:p-10 overflow-y-auto space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-3xl font-bold text-slate-900">{selectedScan.plantType}</h2>
-                  <h3 className="text-xl font-bold text-emerald-600 mt-1">{selectedScan.plantTypeTamil}</h3>
+              <div className="flex justify-between items-start gap-4">
+                <div className="max-w-[70%]">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">{selectedScan.plantType}</h2>
+                  <h3 className="text-lg sm:text-xl font-bold text-emerald-600 mt-1 break-words">{selectedScan.plantTypeTamil}</h3>
                 </div>
-                <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${
+                <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest shrink-0 ${
                   selectedScan.healthStatus === 'Healthy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                 }`}>
                   {selectedScan.healthStatus}
@@ -165,10 +165,10 @@ const HistoryView: React.FC<Props> = ({ history, onDelete }) => {
                     Recommendations / பரிந்துரைகள்
                   </h4>
                   <div className="space-y-4">
-                    {selectedScan.recommendations.map((rec, i) => (
+                    {(selectedScan.recommendations || []).map((rec, i) => (
                       <div key={i} className="space-y-1">
                         <p className="text-xs text-slate-700">• {rec}</p>
-                        <p className="text-xs text-emerald-700 font-medium pl-3 italic">{selectedScan.recommendationsTamil[i]}</p>
+                        <p className="text-xs text-emerald-700 font-medium pl-3 italic">{selectedScan.recommendationsTamil?.[i] || ''}</p>
                       </div>
                     ))}
                   </div>
